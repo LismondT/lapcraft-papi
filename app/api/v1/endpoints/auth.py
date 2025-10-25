@@ -49,7 +49,6 @@ async def register(
     }
     access_token = create_access_token(user_token_data)
 
-    # Создаем refresh token
     refresh_token = create_refresh_token()
     expires_at = get_token_expiration("refresh")
 
