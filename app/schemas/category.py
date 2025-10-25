@@ -10,6 +10,7 @@ class CategoryBase(BaseModel):
     icon: Optional[str] = None
     color: Optional[str] = None
     product_count: int = 0
+    children_count: int = 0  # Добавляем в схему
 
 
 class CategoryCreate(CategoryBase):

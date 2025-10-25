@@ -28,6 +28,7 @@ async def register(
         db: Session = Depends(get_db)
 ):
     user_repo = UserRepository(db)
+    refresh_token_repo = RefreshTokenRepository(db)
 
     # Проверяем, нет ли пользователя с таким email
     existing_user = user_repo.get_by_email(user_data.email)

@@ -171,3 +171,47 @@ async def search_categories(
     repo = CategoryRepository(db)
     categories = repo.search_categories(search_term)
     return categories
+
+
+@router.post("/{category_id}/update-counters")
+async def update_category_counters(
+        category_id: str,
+        db: Session = Depends(get_db)
+):
+    """Принудительное обновление счетчиков категории"""
+    repo = CategoryRepository(db)
+
+    category = repo.get_by_id(category_id)
+    if not category:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found"
+        )
+
+    # Обновляем product_count (включая дочерние категории)
+    product_count = repo.update_product_count(category_id)
+
+    # Обновляем children_count
+    repo.update_children_count(category_id)
+
+    return {
+        "message": "Category counters updated successfully",
+        "product_count": product_count,
+        "children_count": category.children_count
+    }
+
+
+@router.post("/update-all-counters")
+async def update_all_category_counters(
+        db: Session = Depends(get_db)
+):
+    """Принудительное обновление всех счетчиков категорий"""
+    repo = CategoryRepository(db)
+    repo.update_all_product_counts()
+
+    # Обновляем children_count для всех категорий
+    categories = repo.get_all_categories()
+    for category in categories:
+        repo.update_children_count(category.id)
+
+    return {"message": "All category counters updated successfully"}

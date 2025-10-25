@@ -42,9 +42,19 @@ class ProductRepository:
         self.db.add(product)
         self.db.commit()
         self.db.refresh(product)
+
+        # Обновляем счетчики продуктов в категории и её родителях
+        if product.category_id:
+            from app.repositories.category_repository import CategoryRepository
+            category_repo = CategoryRepository(self.db)
+            category_repo.update_product_counts_for_category_tree(product.category_id)
+
         return product
 
     def update(self, product_id: str, update_data: Dict[str, Any]) -> Optional[Product]:
+        old_product = self.get_by_id(product_id)
+        old_category_id = old_product.category_id if old_product else None
+
         product = self.get_by_id(product_id)
         if product:
             for field, value in update_data.items():
@@ -52,13 +62,37 @@ class ProductRepository:
                     setattr(product, field, value)
             self.db.commit()
             self.db.refresh(product)
+
+            # Обновляем счетчики продуктов если изменилась категория
+            new_category_id = product.category_id
+            if old_category_id != new_category_id:
+                from app.repositories.category_repository import CategoryRepository
+                category_repo = CategoryRepository(self.db)
+
+                # Обновляем старую категорию и её родителей
+                if old_category_id:
+                    category_repo.update_product_counts_for_category_tree(old_category_id)
+
+                # Обновляем новую категорию и её родителей
+                if new_category_id:
+                    category_repo.update_product_counts_for_category_tree(new_category_id)
+
         return product
 
     def delete(self, product_id: str) -> bool:
         product = self.get_by_id(product_id)
         if product:
+            category_id = product.category_id
+
             self.db.delete(product)
             self.db.commit()
+
+            # Обновляем счетчики продуктов в категории и её родителях
+            if category_id:
+                from app.repositories.category_repository import CategoryRepository
+                category_repo = CategoryRepository(self.db)
+                category_repo.update_product_counts_for_category_tree(category_id)
+
             return True
         return False
 

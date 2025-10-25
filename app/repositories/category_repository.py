@@ -24,21 +24,39 @@ class CategoryRepository:
         self.db.add(category)
         self.db.commit()
         self.db.refresh(category)
+
+        # Обновляем children_count у родительской категории
+        if category.parent_id:
+            self.update_children_count(category.parent_id)
+
         return category
 
     def update(self, category_id: str, update_data: Dict[str, Any]) -> Optional[Category]:
         category = self.get_by_id(category_id)
+        old_parent_id = category.parent_id if category else None
+
         if category:
             for field, value in update_data.items():
                 if hasattr(category, field):
                     setattr(category, field, value)
             self.db.commit()
             self.db.refresh(category)
+
+            # Если изменился parent_id, обновляем children_count у старого и нового родителя
+            new_parent_id = category.parent_id
+            if old_parent_id != new_parent_id:
+                if old_parent_id:
+                    self.update_children_count(old_parent_id)
+                if new_parent_id:
+                    self.update_children_count(new_parent_id)
+
         return category
 
     def delete(self, category_id: str) -> bool:
         category = self.get_by_id(category_id)
         if category:
+            parent_id = category.parent_id
+
             # Проверяем, есть ли продукты в этой категории
             product_count = self.db.query(Product).filter(Product.category_id == category_id).count()
             if product_count > 0:
@@ -51,8 +69,21 @@ class CategoryRepository:
 
             self.db.delete(category)
             self.db.commit()
+
+            # Обновляем children_count у родительской категории
+            if parent_id:
+                self.update_children_count(parent_id)
+
             return True
         return False
+
+    def update_children_count(self, category_id: str) -> None:
+        """Обновляет счетчик дочерних категорий"""
+        children_count = self.db.query(Category).filter(Category.parent_id == category_id).count()
+        category = self.get_by_id(category_id)
+        if category:
+            category.children_count = children_count
+            self.db.commit()
 
     def get_all_categories(self, include_children: bool = False) -> List[Category]:
         query = self.db.query(Category)
@@ -113,13 +144,41 @@ class CategoryRepository:
         return category
 
     def update_product_count(self, category_id: str) -> int:
-        """Обновление счетчика продуктов в категории"""
-        product_count = self.db.query(Product).filter(Product.category_id == category_id).count()
+        """Обновление счетчика продуктов в категории (включая дочерние категории)"""
+        # Получаем все ID категорий (включая дочерние)
+        all_category_ids = self.get_all_subcategory_ids(category_id)
+
+        # Считаем общее количество продуктов
+        total_product_count = self.db.query(Product).filter(
+            Product.category_id.in_(all_category_ids)
+        ).count()
+
+        # Обновляем счетчик для основной категории
         category = self.get_by_id(category_id)
         if category:
-            category.product_count = product_count
+            category.product_count = total_product_count
             self.db.commit()
-        return product_count
+
+        return total_product_count
+
+    def update_all_product_counts(self) -> None:
+        """Обновляет счетчики продуктов для всех категорий"""
+        categories = self.get_all_categories()
+        for category in categories:
+            self.update_product_count(category.id)
+
+    def update_product_counts_for_category_tree(self, category_id: str) -> None:
+        """Рекурсивно обновляет счетчики продуктов для категории и всех её родителей"""
+        category = self.get_by_id(category_id)
+        if not category:
+            return
+
+        # Обновляем текущую категорию
+        self.update_product_count(category_id)
+
+        # Рекурсивно обновляем всех родителей
+        if category.parent_id:
+            self.update_product_counts_for_category_tree(category.parent_id)
 
     def search_categories(self, search_term: str) -> List[Category]:
         """Поиск категорий по названию"""

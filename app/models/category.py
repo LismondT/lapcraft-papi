@@ -13,6 +13,7 @@ class Category(BaseModel):
     icon = Column(String, nullable=True)
     color = Column(String, nullable=True)
     product_count = Column(Integer, default=0)
+    children_count = Column(Integer, default=0)  # Добавляем счетчик дочерних категорий
 
     # Связь с родительской категорией
     parent = relationship(
