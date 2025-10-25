@@ -22,7 +22,7 @@ from app.core.security import (
 router = APIRouter()
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def register(
         user_data: UserCreate,
         db: Session = Depends(get_db)
@@ -40,7 +40,27 @@ async def register(
 
     # Создаем пользователя
     user = user_repo.create(user_data.dict())
-    return user
+
+    # Создаем access token
+    user_token_data = {
+        "id": str(user.id),
+        "email": user.email,
+        "name": user.name
+    }
+    access_token = create_access_token(user_token_data)
+
+    # Создаем refresh token
+    refresh_token = create_refresh_token()
+    expires_at = get_token_expiration("refresh")
+
+    # Сохраняем refresh token в базе
+    refresh_token_repo.create(str(user.id), refresh_token, expires_at)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
 
 
 @router.post("/login", response_model=Token)
